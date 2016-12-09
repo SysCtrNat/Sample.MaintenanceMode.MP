@@ -1,0 +1,1169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ManagementPack SchemaVersion="2.0" ContentReadable="true" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Manifest>
+    <Identity>
+      <ID>Sample.MaintenanceMode.MP</ID>
+      <Version>1.0.0.2</Version>
+    </Identity>
+    <Name>Sample.MaintenanceMode.MP</Name>
+    <References>
+      <Reference Alias="SC">
+        <ID>Microsoft.SystemCenter.Library</ID>
+        <Version>7.0.8432.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+      <Reference Alias="Windows">
+        <ID>Microsoft.Windows.Library</ID>
+        <Version>7.5.8501.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+      <Reference Alias="Health">
+        <ID>System.Health.Library</ID>
+        <Version>7.0.8432.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+      <Reference Alias="System">
+        <ID>System.Library</ID>
+        <Version>7.5.8501.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+    </References>
+  </Manifest>
+  <TypeDefinitions>
+    <EntityTypes>
+      <ClassTypes>
+        <ClassType ID="Sample.MaintenanceMode.MP.AgentMaintModeClass" Accessibility="Internal" Abstract="false" Base="Windows!Microsoft.Windows.LocalApplication" Hosted="true" Singleton="false" />
+      </ClassTypes>
+    </EntityTypes>
+    <SecureReferences>
+      <SecureReference ID="Sample.MaintenanceMode.MP.OpsMgrAdmin.RunAsProfile" Accessibility="Public" Context="System!System.Entity" />
+    </SecureReferences>
+    <ModuleTypes>
+      <WriteActionModuleType ID="Sample.MaintenanceMode.MP.EventlogEntryTriggersMM.WriteAction" Accessibility="Internal" RunAs="Sample.MaintenanceMode.MP.OpsMgrAdmin.RunAsProfile" Batching="false">
+        <Configuration>
+          <xsd:element minOccurs="1" name="Debug" type="xsd:boolean" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+          <xsd:element minOccurs="1" name="DebugFileName" type="xsd:string" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+          <xsd:element minOccurs="1" name="LogSuccessEvent" type="xsd:boolean" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+          <xsd:element minOccurs="1" name="TargetFQDN" type="xsd:string" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+          <xsd:element minOccurs="1" name="EventDescription" type="xsd:string" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+          <xsd:element minOccurs="1" name="FallBackMS" type="xsd:string" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+          <xsd:element minOccurs="1" name="TimeoutSeconds" type="xsd:integer" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+        </Configuration>
+        <OverrideableParameters>
+          <OverrideableParameter ID="Debug" Selector="$Config/Debug$" ParameterType="bool" />
+          <OverrideableParameter ID="DebugFileName" Selector="$Config/DebugFileName$" ParameterType="string" />
+          <OverrideableParameter ID="LogSuccessEvent" Selector="$Config/LogSuccessEvent$" ParameterType="bool" />
+          <OverrideableParameter ID="TargetFQDN" Selector="$Config/TargetFQDN$" ParameterType="string" />
+          <OverrideableParameter ID="EventDescription" Selector="$Config/EventDescription$" ParameterType="string" />
+          <OverrideableParameter ID="FallBackMS" Selector="$Config/FallBackMS$" ParameterType="string" />
+          <OverrideableParameter ID="TimeoutSeconds" Selector="$Config/TimeoutSeconds$" ParameterType="int" />
+        </OverrideableParameters>
+        <ModuleImplementation Isolation="Any">
+          <Composite>
+            <MemberModules>
+              <WriteAction ID="WA" TypeID="System!System.CommandExecuter">
+                <ApplicationName>%WinDir%\system32\windowspowershell\v1.0\powershell.exe</ApplicationName>
+                <WorkingDirectory />
+                <CommandLine>"&amp;'$File/ScheduledMaintenanceForInstances.ps1$' -Debug $Config/Debug$ -DebugFileName '$Config/DebugFileName$' -LogSuccessEvent $Config/LogSuccessEvent$ -TargetFQDN '$Config/TargetFQDN$' -EventDescription '$Config/EventDescription$' -FallBackMS '$Config/FallBackMS$'"</CommandLine>
+                <TimeoutSeconds>$Config/TimeoutSeconds$</TimeoutSeconds>
+                <RequireOutput>true</RequireOutput>
+                <Files>
+                  <File>
+                    <Name>ScheduledMaintenanceForInstances.ps1</Name>
+                    <Contents> 
+#************************************************************************************************************
+# ScheduledMaintenanceForInstances.ps1
+#
+# This script sets the maintenance mode for the windows computer (TargetFQDN), defined classes and instances. It also sets the
+# maintenance mode for hosted clustered resources. The given event description defines the duration, reason, comment and
+# if classes or instances are defined.
+#
+# Usage:
+# powershell "&amp;'.\ScheduledMaintenanceForInstances.ps1'-debug True -debugFileName '&lt;full path to debug log&gt;' 
+# -logSuccessEvent &lt;True|False&gt; -TargetFQDN '&lt;string&gt;' -eventdescription '&lt;string&gt;'"
+#
+# Example:
+# powershell "&amp;'C:\test\ScheduledMaintenanceForInstances.ps1'-Debug True -debugFileName 'c:\it\mom\schedmm.log'
+# -LogSuccessEvent True -TargetFQDN 'servername.abc.def' -eventdescription 'Start;10;Application: Maintenance;;;Domain\Username;12/12/2011 6:14:04 AM'"
+#
+# 2012 NH
+# changes in version 2.4:
+# added stop maintenance mode for class "Sample Agent Maintenance Mode Class"
+# 2012 TPE
+# change in version 2.5:
+# stop command completed
+#************************************************************************************************************
+
+param($StartStopCommand, $debug, $debugfilename, $logSuccessEvent, $TargetFQDN, $eventdescription, $FallBackMS);
+
+# constants
+$SCRIPT_NAME = "ScheduledMaintenanceForInstances.ps1";
+$SCRIPT_VERSION = "2.5";
+$VOID_STRING = "VOID"
+
+# event constants
+$EVENT_TYPE_SUCCESS = 0
+$EVENT_TYPE_ERROR = 1
+$EVENT_TYPE_WARNING = 2
+$EVENT_TYPE_INFORMATION = 4
+
+$EVENT_ID_SUCCESS = 1000           # use IDs in the range 1 - 1000
+$EVENT_ID_SCRIPTERROR = 999        # then you can use eventcreate.exe for testing
+$EVENT_ID_PROCESSING_ERROR = 998
+
+#$debug = $True
+#$debugfilename = 'c:\it\ScheduledMaintenanceForInstances.log'
+#$logSuccessEvent = $True
+#$TargetFQDN = 'server.fqdn'
+#$FallBackMS = 'server2.fqdn'
+#$eventdescription = 'Stop;10;ApplicationInstallation;Microsoft.Windows.Client.Win7.DiskPartition;Disk #0;vasoft\tpeter;12/12/2012 05:40:00 PM'
+
+# function for logging to stdout and log file simultaneously
+function Log($msg, $debug, $debugLog)
+{
+    write-host $msg;
+    # write to debug log if required
+    if ($debug -eq $true) 
+    {
+        $debugLog.writeline($msg)
+    }
+}
+
+# function to stop the maintenance mode on an object 
+function StopMaintenance 
+{
+	param ($msg, $debug, $debugLog, $mmEndDate, $comment, $object)
+	
+	$msg = "Function StopMaintenance for object: " + $object;
+    Log -msg $msg -debug $debug -debugLog $debugLog;
+	$object.StopMaintenanceMode([System.DateTime]::Now.ToUniversalTime(),[Microsoft.EnterpriseManagement.Common.TraversalDepth]::Recursive);
+	
+}
+
+
+# function to extend the maintenance mode on an object that already is in maintenance mode.
+function ExtendMaintenance 
+{
+	param ($msg, $debug, $debugLog, $mmEndDate, $comment, $object)
+	$msg = "The instance is already in maintenance.`r`nCheck whether the current maintenance end time will occur after the scheduled end time...";
+    Log -msg $msg -debug $debug -debugLog $debugLog;
+    
+	# calculate the date difference between the scheduled end date and the current end date to check if the current maintenance window has to be extended. 
+    # this will positive if the current end date is in the future 
+    $currentEndTime = $object.GetMaintenanceWindow().ScheduledEndTime;
+    $dateDiffScheduledEnd = New-TimeSpan $mmEndDate $currentEndTime; 
+    if ($dateDiffScheduledEnd.TotalMinutes -lt 0)
+    {
+        $comment = $object.GetMaintenanceWindow().Comments + "`r`nExtended: " + $comment;
+      
+		$msg = "The scheduled UTC end time " + $mmEndDate + " will occur after the current UTC end time " + $currentEndTime + ".`r`nExtend the current maintenance window...`r`nUsing comment: " + $comment;
+        Log -msg $msg -debug $debug -debugLog $debugLog;
+        
+		$mmEndDate = $mmEndDate.ToUniversalTime();
+		
+		# the Set-MaintenanceWindow cmdlet did not work during the tests on R2. Use the SDK method instead.
+        $object.UpdateMaintenanceMode($mmEndDate, $object.GetMaintenanceWindow().Reason, $comment);
+    }
+    else
+    {
+        $msg = "The current UTC end time " + $currentEndTime + " will occur after or is the same as the scheduled UTC end time " + $mmEndDate + ". No action is required.";
+        Log -msg $msg -debug $debug -debugLog $debugLog;
+    }
+}
+
+# Function to set All Computer related Objects into Maintenance Mode because the new Start-NewMaintenanceMode CMDlet only set the computer object itself into MM
+# this behaviour has changed related to 2007 R2
+#
+function SetMMAll($comp)
+{
+	if ($comp.InMaintenanceMode -eq $true)
+	{
+		if ($StartStopCommand -eq "Start")
+		{
+			$msg = "Object already in maintenance. Extend Maintenance!";
+			Log -msg $msg -debug $debug -debugLog $debugLog;
+			ExtendMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $comp;
+		}
+		else
+		{
+			# stop Maintenance Mode
+			StopMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $comp;
+		}
+	}
+    else	
+	{
+		if ($StartStopCommand -eq "Start")
+		{
+			$mmEndDate = $mmEndDate.ToUniversalTime();
+			# Put the Windows Computer and all its contained objects into maintenance mode
+			$msg = "Putting " + $comp.Name + " into maintenance mode";
+			Log -msg $msg -debug $debug -debugLog $debugLog;
+			Start-SCOMMaintenanceMode -instance $comp -endTime:$mmEndDate -comment:$comment -Reason:$Reason;  
+		}
+		else
+		{
+			# Stop Maintenance Mode requested -&gt; Computer currently not in Maintenance Mode -&gt; nothing to to (only log)
+			$msg = "The computer is currently not in maintenance. No Maintenance Mode stop required for " + $comp.Name;
+			Log -msg $msg -debug $debug -debugLog $debugLog;
+		}
+
+	}
+
+    $HealthServiceWatcherClass = Get-SCOMClass -DisplayName "Health Service Watcher"
+    $HealthServiceWatcher = Get-SCOMClassInstance -Class:$HealthServiceWatcherClass | where{$_.Displayname -match $comp.DisplayName} 
+    If ($HealthServiceWatcher -is [Object])
+    {
+		if ($HealthServiceWatcher.InMaintenanceMode -eq $true)
+		{
+			if ($StartStopCommand -eq "Start")
+			{
+				$msg = "Object already in maintenance. Extend Maintenance for HealthServiceWatcher " + $HealthServiceWatcher.DisplayName;
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+				ExtendMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $HealthServiceWatcher;
+			}
+			else
+			{
+				# stop Maintenance Mode
+				StopMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $HealthServiceWatcher;
+			}
+		}
+		else	
+		{
+			if ($StartStopCommand -eq "Start")
+			{
+				# Put the Windows Computer and all its contained objects into maintenance mode
+				$msg = "Putting HealthServiceWatcher for " + $HealthServiceWatcher.DisplayName + " into maintenance mode";
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+				Start-SCOMMaintenanceMode -instance $HealthServiceWatcher -endTime:$mmEndDate -comment:$comment -Reason:$Reason;  
+			}
+			else
+			{
+				# Stop Maintenance Mode requested -&gt; Computer currently not in Maintenance Mode -&gt; nothing to to (only log)
+				$msg = "The HealthServiceWatcher is currently not in maintenance. No Maintenance Mode stop required for HealthServiceWatcher of " + $HealthServiceWatcher.DisplayName;
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+			}
+		}
+    }
+    else
+    {
+        $msg = "No Healthservice Watcher Object to set into maintenance mode"
+        Log -msg $msg -debug $debug -debugLog $debugLog;
+    }
+    
+    $instancetemp = get-SCOMClassInstance | Where-Object {$_.Path -match $comp}
+	Foreach ($object in $instancetemp)
+	{
+        if ($object.InMaintenanceMode -eq $true)
+        {
+			if ($StartStopCommand -eq "Start")
+			{
+				$msg = "Object already in maintenance. Extend Maintenance for " + $object.FullName;
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+				ExtendMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $object;
+			}
+			else
+			{
+				# stop Maintenance Mode
+				StopMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $object;
+			}
+			
+		}
+        else
+        {
+			if ($StartStopCommand -eq "Start")
+			{
+                $msg = "The instance is currently not in maintenance. Create a new maintenance window for " + $object.FullName;
+                Log -msg $msg -debug $debug -debugLog $debugLog;
+				$mmEndDate = $mmEndDate.ToUniversalTime();
+                Start-SCOMMaintenanceMode -instance $object -endtime $mmEndDate -reason $Reason -comment $comment
+                # $object.ScheduleMaintenanceMode($StartDate, $mmEndDate, $Reason, $comment);
+			}
+			else
+			{
+				# Stop Maintenance Mode requested -&gt; Instance currently not in Maintenance Mode -&gt; nothing to to (only log)
+				$msg = "The Instance is currently not in maintenance. No Maintenance Mode stop required for " + $object.FullName;
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+			}
+        }
+    }
+
+	if ($StartStopCommand -eq "Start")
+	{
+		# $MaintModeClass = Get-SCOMClass -DisplayName "Sample Agent Maintenance Mode Class"
+		$MaintModeClass = Get-SCOMClass -Name "Sample.MaintenanceMode.MP.AgentMaintModeClass"
+		$MaintModeInstance = Get-SCOMClassInstance -Class:$MaintModeClass | where{$_.Path -match $comp.Name} 
+		$MaintModeInstance.StopMaintenanceMode([System.DateTime]::Now.ToUniversalTime(),[Microsoft.EnterpriseManagement.Common.TraversalDepth]::Recursive);
+		$msg = "Remove the following Instance from Maintenance Mode:" + $MaintModeClass.Name + "." + $MaintModeInstance.Path
+		Log -msg $msg -debug $debug -debugLog $debugLog;
+
+	}
+}
+
+
+# create debug file if required
+if ($debug -eq $true) 
+{
+  $debugLog = New-Object System.IO.StreamWriter($debugFileName);
+}
+$currentuser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name;
+$MSFQDN = [System.Net.Dns]::GetHostEntry([System.Net.Dns]::GetHostName()).HostName;
+$msg = "Script started -- " + (get-date).ToString() + "`r`nUsing security context: " + $currentuser;
+Log -msg $msg -debug $debug -debugLog $debugLog;
+
+$msg = "`r`nDebug = " + $debug + "`r`nDebug file name: " + $debugFileName + "`r`nLog success event: " + $logSuccessEvent;
+$msg += "`r`nManagement Server: " + $MSFQDN + "`r`nComputer Principalname: " + $TargetFQDN + "`r`neventdescription: " + $eventdescription;
+Log -msg $msg -debug $debug -debugLog $debugLog;
+
+# create MOM Script API COM object 
+$api = New-Object -comObject "MOM.ScriptAPI"; 
+
+# Check if OperationsManager module is loaded
+If (Get-Module -Name "OperationsManager")
+{
+    $msg = "`r`nOperations Manager module already loaded";
+    Log -msg $msg -debug $debug -debugLog $debugLog;
+
+}
+else
+     {
+ try {
+ # Try to load the module
+ Import-Module -Name "OperationsManager"
+ } catch {
+ # Did not work, exit the script
+	$msg = "`r`nCould not load Operations Manager module! Exit script";
+	Log -msg $msg -debug $debug -debugLog $debugLog;
+	if ($debug -eq $true) 
+	{
+		$debugLog.close();
+	}
+	exit
+ }
+}
+
+# Module is loaded, connect to Management Group/Server
+New-SCOMManagementGroupConnection -ComputerName $MSFQDN;
+$MGC = Get-SCOMManagementGroup;
+
+if (-not $MGC)
+{
+	 $msg = "`r`nCould not Connect to Management Group using MS " + $MSFQDN + "! Trying now FallBack MS";
+	 Log -msg $msg -debug $debug -debugLog $debugLog;
+
+	 New-SCOMManagementGroupConnection -ComputerName $FallBackMS;
+	 $MGC = Get-SCOMManagementGroup;
+
+	 if (-not $MGC)
+	 {
+		$msg = "`r`nCould not Connect to Management Group using the FallBackMS " + $FallBackMS + "! Exit script";
+		Log -msg $msg -debug $debug -debugLog $debugLog;
+		if ($debug -eq $true) 
+			{$debugLog.close()}
+		exit
+	 }
+	 else
+	 {
+		$msg = "`r`nConnected to Management Group " + $MGC.Name + " using MS " + $FallBackMS;
+		Log -msg $msg -debug $debug -debugLog $debugLog;
+	 }
+}
+else
+{
+	$msg = "`r`nConnected to Management Group " + $MGC.Name + " using MS " + $MSFQDN;
+	Log -msg $msg -debug $debug -debugLog $debugLog;
+}
+
+
+$logentries = $eventdescription.Split(";")
+
+$StartStopCommand = $logentries[0].Split(":")[1].trim()
+if ($StartStopCommand -ne "Stop") {$StartStopCommand = "Start"}
+
+$DurationInMin = $logentries[1]
+$Reason = $logentries[2]
+$class = $logentries[3]
+$instance = $logentries[4]
+$comment = $logentries[5]
+
+$msg = "`r`nCommand = " + $StartStopCommand + "`r`nDuration = " + $DurationInMin + "`r`nReason = " + $Reason + "`r`nClass = " + $class + "`r`nInstance = " + $instance + "`r`nComment = " + $comment;
+Log -msg $msg -debug $debug -debugLog $debugLog;
+
+if ($StartStopCommand -eq "Start")
+	{
+	# Get the start time and calculate the end time
+	# $startTime = [System.DateTime]::Now.ToUniversalTime()
+	$startDate = $(Get-Date).ToUniversalTime();
+	$mmEndDate = $startDate.AddMinutes($DurationInMin)
+	}
+else
+	{
+	$mmEndDate = $(Get-Date).ToUniversalTime();
+	}
+	
+$msg = "Maintenance End time: " + $mmEndDate;
+Log -msg $msg -debug $debug -debugLog $debugLog;
+
+# ---------------------------- MAINTENANCE -------------------------------------
+# process the scheduled maintenance
+
+# get all Management Servers - a management server may not enter maintenance mode!
+$managementServerNames = $null
+$managementServer = Get-SCOMManagementServer
+# check whether more than one server is returned
+# if not convert output to an array
+if ($managementServer -is [Array]) {$managementServers = $managementServer} else {$managementServers = ,$managementServer}
+# loop through the returned servers
+    $i = 0;
+    while ($i -lt $managementServers.count) 
+    {
+        if ($managementServerNames -eq $null) 
+        {
+            $managementServerNames = $managementServers[$i].PrincipalName,$managementServers[$i].ComputerName
+        }
+        else
+        {
+            $managementServerNames += $managementServers[$i].PrincipalName
+            $managementServerNames += $managementServers[$i].ComputerName
+        }
+        $i++;
+    }
+    $msg = "Retrieved Ops Mgr Management Server: " + [System.String]::Join(", ", $managementServerNames)
+    Log -msg $msg -debug $debug -debugLog $debugLog;
+    
+	# check whether the hosting Windows computer acts as an OpsMgr management server
+    # if it is skip the entry
+    if ($managementServerNames -contains $TargetFQDN)
+    {
+        $msg = "The computer " + $TargetFQDN + " is an Ops Mgr Management Server! Skipping..."
+        Log -msg $msg -debug $debug -debugLog $debugLog;
+    }
+    else
+    {
+    	$msg = "The computer " + $TargetFQDN + " is not an Ops Mgr Management Server! Continue..."
+        Log -msg $msg -debug $debug -debugLog $debugLog;
+		
+		$msg = "Check whether the instance is already in maintenance...";
+    	Log -msg $msg -debug $debug -debugLog $debugLog;
+
+		# if no class is defined, the whole computer will be set into maintenance mode.
+		if ($class -ne "")
+    	{
+            $instancetempClass = Get-SCOMClass  -name $class;
+
+            if ($instance -eq "") 
+            {
+                $msg = "Looking for an instance of '" +  $class + "' using the criteria Path match " + $TargetFQDN;
+                Log -msg $msg -debug $debug -debugLog $debugLog;
+                $instancetemp = get-SCOMClassInstance -Class $instancetempClass | Where-Object {$_.Path -match $TargetFQDN} 
+                $msg = "Found instance " +  $instancetemp;
+                Log -msg $msg -debug $debug -debugLog $debugLog;
+            }
+            else
+            {
+                $msg = "Looking for an instance of '" +  $class + "' using the criteria Path match " + $TargetFQDN + " and Displayname match " + $instance;
+                Log -msg $msg -debug $debug -debugLog $debugLog;
+                $instancetemp = get-SCOMClassInstance -Class $instancetempClass | Where-Object {($_.Path -match $TargetFQDN) -and ($_.Displayname -match $instance)}
+                $msg = "Found instance " +  $instancetemp;
+                Log -msg $msg -debug $debug -debugLog $debugLog;
+            }
+
+		    Foreach ($object in $instancetemp)
+		    {
+			
+                if ($object.InMaintenanceMode -eq $true)
+                {
+					if ($StartStopCommand -eq "Start")
+					{
+						$msg = "Object already in maintenance. Extend Maintenance for " + $object.FullName;
+						Log -msg $msg -debug $debug -debugLog $debugLog;
+						ExtendMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $object;
+					}
+					else
+					{
+						# stop Maintenance Mode
+						StopMaintenance -msg $msg -debug $debug -debugLog $debugLog -mmEndDate $mmEndDate -comment $comment -object $object;
+					}
+				}
+                else
+                {
+					if ($StartStopCommand -eq "Start")
+					{
+						$msg = "The instance is currently not in maintenance. Create a new maintenance window for " + $object.FullName;
+						Log -msg $msg -debug $debug -debugLog $debugLog;
+						$mmEndDate = $mmEndDate.ToUniversalTime();
+						Start-SCOMMaintenanceMode -instance $object -endtime $mmEndDate -reason $Reason -comment $comment
+					}
+					else
+					{
+						# Stop Maintenance Mode requested -&gt; Object currently not in Maintenance Mode -&gt; nothing to to (only log)
+						$msg = "The instance is currently not in maintenance. No Maintenance Mode stop required for " + $object.FullName;
+						Log -msg $msg -debug $debug -debugLog $debugLog;
+					}
+                }
+           }
+		}
+		else
+		{
+			if ($StartStopCommand -eq "Start")
+			{
+				$msg = "No class defined, set the server object into maintenance.";
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+			}
+			Else
+			{
+				$msg = "No class defined, remove the server from maintenance mode.";
+				Log -msg $msg -debug $debug -debugLog $debugLog;
+			}
+			
+            $computerClass = Get-SCOMClass -name "Microsoft.Windows.Computer";
+            $computer = Get-SCOMClassInstance  -Class $computerClass | Where-Object {$_.DisplayName -like $TargetFQDN +".*" -or $_.DisplayName -match $TargetFQDN };
+
+            $msg = "Object: " + $computer.Name
+            Log -msg $msg -debug $debug -debugLog $debugLog;
+			
+            If ($computer -is [Object])
+            {
+                SetMMAll $computer
+            }
+            Else
+            {
+                $msg = "No Oject to set into maintenance mode"
+                Log -msg $msg -debug $debug -debugLog $debugLog;
+                Exit
+            }
+
+			# check if agent is part of a cluster and hosts virtual machines
+			$msg = "Check whether the computer is hosting virtual machines";
+			Log -msg $msg -debug $debug -debugLog $debugLog;
+			$agent = get-SCOMagent | where {$_.DisplayName -eq $computer.DisplayName}
+			$clusterMachines = $agent.GetRemotelyManagedComputers()
+			
+			if ($clusterMachines -is [Object])
+			{
+				foreach ($cluster in $clusterMachines)
+				{
+                    $computer = Get-SCOMClassInstance  -Class $computerClass | Where-Object {$_.DisplayName -like $cluster.displayname +".*" -or $_.DisplayName -match $cluster.displayname };
+                    If ($computer -is [Object])
+                    {
+                        SetMMAll $computer
+                    }
+                    else
+                    {
+                        $msg = "No object to set into maintenance mode"
+                        Log -msg $msg -debug $debug -debugLog $debugLog;
+                    }
+				}
+			}
+   		}						
+	}
+										
+# log success event if required
+if ($logSuccessEvent -eq $true)
+{
+  $api.LogScriptEvent($SCRIPT_NAME + " " + $SCRIPT_VERSION, $EVENT_ID_SUCCESS, $EVENT_TYPE_INFORMATION, "Successfully executed the script.");
+}
+
+$msg = "`r`n`r`nFinished processing the maintenance mode scheduling.`r`nScript finished -- " + (get-date).ToString() + "`r`n";
+Log -msg $msg -debug $debug -debugLog $debugLog;
+
+# close debug log if required
+if ($debug -eq $true) 
+{
+  $debugLog.close();
+}
+ 											</Contents>
+                    <Unicode>true</Unicode>
+                  </File>
+                </Files>
+              </WriteAction>
+            </MemberModules>
+            <Composition>
+              <Node ID="WA" />
+            </Composition>
+          </Composite>
+        </ModuleImplementation>
+        <InputType>System!System.BaseData</InputType>
+      </WriteActionModuleType>
+      <WriteActionModuleType ID="Sample.MaintenanceMode.MP.WriteAction.DeployableFile" Accessibility="Public" Batching="false">
+        <Configuration>
+          <xsd:element name="FilePaths" type="xsd:string" xmlns:xsd="http://www.w3.org/2001/XMLSchema" />
+        </Configuration>
+        <ModuleImplementation Isolation="Any">
+          <Composite>
+            <MemberModules>
+              <WriteAction ID="WA" TypeID="Windows!Microsoft.Windows.PowerShellWriteAction">
+                <ScriptName>DeployableFile.ps1</ScriptName>
+                <ScriptBody><![CDATA[param ([string]$FilePaths)
+
+  $api = New-Object -comObject 'MOM.ScriptAPI'
+  $api.LogScriptEvent("DeployableFile.ps1", 5678, 0, "Script started")
+  
+    $TargetDirectory = "C:\IT\MOM\MM"
+
+    If (!(Test-Path -Path "$TargetDirectory")) { New-Item -ItemType:Directory -Path:"$TargetDirectory" }
+
+    [array]$ArFiles = $FilePaths.Split(",")
+    ForEach ($FilePath in $ArFiles) {
+      $ArFilePath = $FilePath.Split("\")
+      $FileName = $arFilePath[$arFilePath.Length -1]
+
+      $api.LogScriptEvent("DeployableFile.ps1", 5678, 0, "File Name: $FileName")
+
+      If ((Test-Path -Path "$TargetDirectory") -and (Test-Path -Path "$FilePath")){
+        $TargetFile = $TargetDirectory + "\" + $FileName
+        If (!(Test-Path -Path $TargetFile)){
+          Try{
+            Copy-Item "$FilePath" "$TargetDirectory" -force
+            $api.LogScriptEvent("DeployableFile.ps1", 5678, 0, "Copied agent file: $FilePath to the directory: $TargetDirectory")
+          }
+          Catch{
+            $api.LogScriptEvent("DeployableFile.ps1", 5678, 0, "Failed to copy agent file: $FilePath to the directory: $TargetDirectory")
+          }
+        }
+      }Else{
+        Call $api.LogScriptEvent("DeployableFile.ps1", 5678, 4, "Failed to copy agent file: $FilePath to the directory: $TargetDirectory.  The source or target does not exist.")
+      }
+    }
+
+$api.LogScriptEvent("DeployableFile.ps1", 5678, 0, "Script completed")]]></ScriptBody>
+                <Parameters>
+                  <Parameter>
+                    <Name>FilePaths</Name>
+                    <Value>$Config/FilePaths$</Value>
+                  </Parameter>
+                </Parameters>
+                <TimeoutSeconds>300</TimeoutSeconds>
+              </WriteAction>
+            </MemberModules>
+            <Composition>
+              <Node ID="WA" />
+            </Composition>
+          </Composite>
+        </ModuleImplementation>
+        <OutputType>System!System.BaseData</OutputType>
+        <InputType>System!System.BaseData</InputType>
+      </WriteActionModuleType>
+      <WriteActionModuleType ID="Sample.MaintenanceMode.MP.WriteAction.DeployLink" Accessibility="Public" Batching="false">
+        <Configuration />
+        <ModuleImplementation Isolation="Any">
+          <Composite>
+            <MemberModules>
+              <WriteAction ID="WA" TypeID="Windows!Microsoft.Windows.PowerShellWriteAction">
+                <ScriptName>DeployLink.ps1</ScriptName>
+                <ScriptBody><![CDATA[$TargetFile = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe"
+$WScriptShell = New-Object -ComObject WScript.Shell
+# Create a Shortcut on default Desktop
+$ShortcutFile = "$env:Public\Desktop\OpsMgrMaintMode.lnk"
+$Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
+$Shortcut.TargetPath = $TargetFile
+$Shortcut.Arguments="-executionpolicy bypass -windowstyle hidden -command c:\it\mom\mm\OpsMgrMM.ps1"
+$Shortcut.WorkingDirectory="$env:windir\System32\WindowsPowerShell\v1.0"
+$Shortcut.Save()
+
+#Create a Shortcut on Public Startup
+$ShortcutFile = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\OpsMgrMaintMode.lnk"
+$Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
+$Shortcut.TargetPath = $TargetFile
+$Shortcut.Arguments="-executionpolicy bypass -windowstyle hidden -command c:\it\mom\mm\OpsMgrMM.ps1"
+$Shortcut.WorkingDirectory="$env:windir\System32\WindowsPowerShell\v1.0"
+$Shortcut.Save()
+]]></ScriptBody>
+                <Parameters />
+                <TimeoutSeconds>300</TimeoutSeconds>
+              </WriteAction>
+            </MemberModules>
+            <Composition>
+              <Node ID="WA" />
+            </Composition>
+          </Composite>
+        </ModuleImplementation>
+        <OutputType>System!System.BaseData</OutputType>
+        <InputType>System!System.BaseData</InputType>
+      </WriteActionModuleType>
+    </ModuleTypes>
+  </TypeDefinitions>
+  <Monitoring>
+    <Discoveries>
+      <Discovery ID="Sample.MaintenanceMode.MP.AgentMaintModeClass.Discovery" Enabled="true" Target="Windows!Microsoft.Windows.Computer" ConfirmDelivery="false" Remotable="true" Priority="Normal">
+        <Category>Discovery</Category>
+        <DiscoveryTypes>
+          <DiscoveryClass TypeID="Sample.MaintenanceMode.MP.AgentMaintModeClass" />
+        </DiscoveryTypes>
+        <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.RegistryDiscoveryProvider">
+          <ComputerName>$Target/Property[Type="Windows!Microsoft.Windows.Computer"]/NetworkName$</ComputerName>
+          <RegistryAttributeDefinitions>
+            <RegistryAttributeDefinition>
+              <AttributeName>SCOM</AttributeName>
+              <Path>SOFTWARE\Microsoft\Microsoft Operations Manager</Path>
+              <PathType>0</PathType>
+              <AttributeType>0</AttributeType>
+            </RegistryAttributeDefinition>
+          </RegistryAttributeDefinitions>
+          <Frequency>21600</Frequency>
+          <ClassId>$MPElement[Name="Sample.MaintenanceMode.MP.AgentMaintModeClass"]$</ClassId>
+          <InstanceSettings>
+            <Settings>
+              <Setting>
+                <Name>$MPElement[Name="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Name>
+                <Value>$Target/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Value>
+              </Setting>
+              <Setting>
+                <Name>$MPElement[Name="System!System.Entity"]/DisplayName$</Name>
+                <Value>Agent Maintenance Mode</Value>
+              </Setting>
+            </Settings>
+          </InstanceSettings>
+        </DataSource>
+      </Discovery>
+    </Discoveries>
+    <Rules>
+      <Rule ID="Sample.MaintenanceMode.MP.FileDeployment.Rule" Target="Sample.MaintenanceMode.MP.AgentMaintModeClass" Enabled="true" ConfirmDelivery="false" Remotable="true" Priority="Normal" DiscardLevel="100">
+        <Category>Operations</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="System!System.Scheduler">
+            <Scheduler>
+              <SimpleReccuringSchedule>
+                <Interval Unit="Seconds">600</Interval>
+                <SyncTime></SyncTime>
+              </SimpleReccuringSchedule>
+              <ExcludeDates></ExcludeDates>
+            </Scheduler>
+          </DataSource>
+        </DataSources>
+        <WriteActions>
+          <WriteAction ID="WA" TypeID="Sample.MaintenanceMode.MP.WriteAction.DeployableFile">
+            <FilePaths>$FileResource[Name='Sample.MaintenanceMode.MP.OpsMgrMM.ps1']/Path$,$FileResource[Name='Sample.MaintenanceMode.MP.OpsMgr2012.png']/Path$,$FileResource[Name='Sample.MaintenanceMode.MP.TriggerOM12MM.Instance.Event.vbs']/Path$</FilePaths>
+          </WriteAction>
+          <WriteAction ID="WA2" TypeID="Sample.MaintenanceMode.MP.WriteAction.DeployLink" />
+        </WriteActions>
+      </Rule>
+      <Rule ID="Sample.MaintenanceMode.MP.EventLogEntryTriggersMM.Rule" Enabled="true" Target="Sample.MaintenanceMode.MP.AgentMaintModeClass" ConfirmDelivery="true" Remotable="false" Priority="Normal" DiscardLevel="100">
+        <Category>Custom</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.EventCollector">
+            <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+            <LogName>Operations Manager</LogName>
+            <AllowProxying>false</AllowProxying>
+            <Expression>
+              <And>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="UnsignedInteger">EventDisplayNumber</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="UnsignedInteger">997</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="String">PublisherName</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="String">Health Service Script</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="Integer">EventLevel</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="Integer">4</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+              </And>
+            </Expression>
+          </DataSource>
+        </DataSources>
+        <WriteActions>
+          <WriteAction ID="WA" TypeID="Sample.MaintenanceMode.MP.EventlogEntryTriggersMM.WriteAction" Target="SC!Microsoft.SystemCenter.CollectionManagementServer">
+            <Debug>true</Debug>
+            <DebugFileName>c:\it\ScheduledMaintenanceForInstances.log</DebugFileName>
+            <LogSuccessEvent>true</LogSuccessEvent>
+            <TargetFQDN>$Data/LoggingComputer$</TargetFQDN>
+            <EventDescription>$Data/EventDescription$</EventDescription>
+            <FallBackMS>server.fqdn</FallBackMS>
+            <TimeoutSeconds>300</TimeoutSeconds>
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+      <Rule ID="Sample.MaintenanceMode.MP.EventLogEntryTriggersAlert.Rule" Enabled="true" Target="Sample.MaintenanceMode.MP.AgentMaintModeClass" ConfirmDelivery="true" Remotable="true" Priority="Normal" DiscardLevel="100">
+        <Category>Custom</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.EventProvider">
+            <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+            <LogName>Operations Manager</LogName>
+            <Expression>
+              <And>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="UnsignedInteger">EventDisplayNumber</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="UnsignedInteger">997</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="String">PublisherName</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="String">Health Service Script</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="Integer">EventLevel</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="Integer">4</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+              </And>
+            </Expression>
+          </DataSource>
+        </DataSources>
+        <WriteActions>
+          <WriteAction ID="Alert" TypeID="Health!System.Health.GenerateAlert">
+            <Priority>0</Priority>
+            <Severity>0</Severity>
+            <AlertName />
+            <AlertDescription />
+            <AlertOwner />
+            <AlertMessageId>$MPElement[Name="Sample.MaintenanceMode.MP.EventLogEntryTriggersAlert.Rule.AlertMessage"]$</AlertMessageId>
+            <AlertParameters>
+              <AlertParameter1>$Target/Property[Type="System!System.Entity"]/DisplayName$</AlertParameter1>
+              <AlertParameter2>$Data/EventDescription$</AlertParameter2>
+            </AlertParameters>
+            <Suppression />
+            <Custom1 />
+            <Custom2 />
+            <Custom3 />
+            <Custom4 />
+            <Custom5 />
+            <Custom6 />
+            <Custom7 />
+            <Custom8 />
+            <Custom9 />
+            <Custom10 />
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+    </Rules>
+  </Monitoring>
+  <Presentation>
+    <Views>
+      <View ID="Sample.MaintenanceMode.MP.Maintenance.AlertView" Accessibility="Public" Enabled="true" Target="System!System.Entity" TypeID="SC!Microsoft.SystemCenter.AlertViewType" Visible="true">
+        <Category>Operations</Category>
+        <Criteria>
+          <ResolutionState>
+            <StateRange Operator="LessThan">255</StateRange>
+          </ResolutionState>
+          <Name>Sample Maintenance Mode %</Name>
+        </Criteria>
+        <Presentation>
+          <ColumnInfo Index="0" SortIndex="0" Width="22" Grouped="true" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Severity</Name>
+            <Id>Severity</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="1" SortIndex="-1" Width="54" Grouped="false" Sorted="false" IsSortable="false" Visible="true" SortOrder="Ascending">
+            <Name>Icon</Name>
+            <Id>Icon</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="2" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Path</Name>
+            <Id>MonitoringObjectPath</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="3" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Source</Name>
+            <Id>MonitoringObjectDisplayName</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="4" SortIndex="-1" Width="22" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Maintenance Mode</Name>
+            <Id>MonitoringObjectInMaintenanceMode</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="5" SortIndex="-1" Width="250" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Name</Name>
+            <Id>Name</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="6" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Resolution State</Name>
+            <Id>ResolutionState</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="7" SortIndex="-1" Width="150" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Created</Name>
+            <Id>TimeRaised</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="8" SortIndex="1" Width="100" Grouped="false" Sorted="true" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Age</Name>
+            <Id>Age</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="9" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Repeat Count</Name>
+            <Id>RepeatCount</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="10" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Assigned To</Name>
+            <Id>Owner</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="11" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Priority</Name>
+            <Id>Priority</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="12" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Latency</Name>
+            <Id>Latency</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="13" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Description</Name>
+            <Id>Description</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="14" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Connector</Name>
+            <Id>ConnectorId</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="15" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Forwarding Status</Name>
+            <Id>ConnectorStatus</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="16" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Class</Name>
+            <Id>Class</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="17" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Full Source Name</Name>
+            <Id>MonitoringObjectPath</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="18" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Time in State</Name>
+            <Id>TimeInState</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="19" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 1</Name>
+            <Id>CustomField1</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="20" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 2</Name>
+            <Id>CustomField2</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="21" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 3</Name>
+            <Id>CustomField3</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="22" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 4</Name>
+            <Id>CustomField4</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="23" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 5</Name>
+            <Id>CustomField5</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="24" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 6</Name>
+            <Id>CustomField6</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="25" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 7</Name>
+            <Id>CustomField7</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="26" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 8</Name>
+            <Id>CustomField8</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="27" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 9</Name>
+            <Id>CustomField9</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="28" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Custom Field 10</Name>
+            <Id>CustomField10</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="29" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Resolved By</Name>
+            <Id>ResolvedBy</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="30" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Time Resolved</Name>
+            <Id>TimeResolved</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="31" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Last State Change</Name>
+            <Id>TimeResolutionStateLastModified</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="32" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Last Modified</Name>
+            <Id>LastModified</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="33" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Last Modified By</Name>
+            <Id>LastModifiedBy</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="34" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Management Group</Name>
+            <Id>ManagementGroup</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="35" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Site</Name>
+            <Id>SiteName</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="36" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Type</Name>
+            <Id>Category</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="37" SortIndex="-1" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="false" SortOrder="Ascending">
+            <Name>Ticket ID</Name>
+            <Id>TicketId</Id>
+          </ColumnInfo>
+        </Presentation>
+        <Target />
+      </View>
+      <View ID="Sample.MaintenanceMode.MP.Maintenance.StateView" Accessibility="Internal" Enabled="true" Target="SC!Microsoft.SystemCenter.HealthServiceWatcher" TypeID="SC!Microsoft.SystemCenter.StateViewType" Visible="true">
+        <Category>Operations</Category>
+        <Criteria>
+          <InMaintenanceMode>true</InMaintenanceMode>
+        </Criteria>
+        <Presentation>
+          <ColumnInfo Index="0" SortIndex="0" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Descending">
+            <Name>State</Name>
+            <Id>Microsoft.SystemCenter.HealthServiceWatcher</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="1" SortIndex="-1" Width="40" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Maintenance Mode</Name>
+            <Id>InMaintenanceMode</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="2" SortIndex="-1" Width="300" Grouped="false" Sorted="true" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Name</Name>
+            <Id>Name</Id>
+          </ColumnInfo>
+        </Presentation>
+        <Target />
+      </View>
+      <View ID="Sample.MaintenanceMode.MP.Production.StateView" Accessibility="Internal" Enabled="true" Target="SC!Microsoft.SystemCenter.HealthServiceWatcher" TypeID="SC!Microsoft.SystemCenter.StateViewType" Visible="true">
+        <Category>Operations</Category>
+        <Criteria>
+          <InMaintenanceMode>false</InMaintenanceMode>
+        </Criteria>
+        <Presentation>
+          <ColumnInfo Index="0" SortIndex="0" Width="100" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Descending">
+            <Name>State</Name>
+            <Id>Microsoft.SystemCenter.HealthServiceWatcher</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="1" SortIndex="-1" Width="40" Grouped="false" Sorted="false" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Maintenance Mode</Name>
+            <Id>InMaintenanceMode</Id>
+          </ColumnInfo>
+          <ColumnInfo Index="2" SortIndex="-1" Width="300" Grouped="false" Sorted="true" IsSortable="true" Visible="true" SortOrder="Ascending">
+            <Name>Name</Name>
+            <Id>Name</Id>
+          </ColumnInfo>
+        </Presentation>
+        <Target />
+      </View>
+      <View ID="Sample.MaintenanceMode.MP.StateView" Accessibility="Public" Enabled="true" Target="System!System.Entity" TypeID="SC!Microsoft.SystemCenter.DashboardViewType" Visible="true">
+        <Category>Operations</Category>
+        <PanelConfiguration Columns="2" Rows="2">
+          <Cell Row="1" Column="1" ViewID="Sample.MaintenanceMode.MP.Maintenance.StateView" />
+          <Cell Row="1" Column="2" ViewID="Sample.MaintenanceMode.MP.Production.StateView" />
+          <Cell Row="2" Column="1" ColumnSpan="2" ViewID="Sample.MaintenanceMode.MP.Maintenance.AlertView" />
+        </PanelConfiguration>
+      </View>
+    </Views>
+    <Folders>
+      <Folder ID="Sample.MaintenanceMode.MP.RootFolder" Accessibility="Public" ParentFolder="SC!Microsoft.SystemCenter.Monitoring.ViewFolder.Root" />
+    </Folders>
+    <FolderItems>
+      <FolderItem ElementID="Sample.MaintenanceMode.MP.StateView" Folder="Sample.MaintenanceMode.MP.RootFolder" ID="Id_0" />
+    </FolderItems>
+    <StringResources>
+      <StringResource ID="Sample.MaintenanceMode.MP.EventLogEntryTriggersAlert.Rule.AlertMessage" />
+    </StringResources>
+  </Presentation>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.FileDeployment.Rule">
+          <Name>Deploy MaintenanceMode Files</Name>
+          <Description>Deploys all required files for the Maintenance Mode Splash Screen to C:\It\Mom\MM</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP">
+          <Name>Sample Maintenance Mode 2012</Name>
+          <Description>This management pack enables the setting of agent based maintenance mode.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.AgentMaintModeClass">
+          <Name>Sample Agent Maintenance Mode Class</Name>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.AgentMaintModeClass.Discovery">
+          <Name>Sample Agent Maintenance Mode Class Discovery</Name>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.EventLogEntryTriggersMM.Rule">
+          <Name>Sample - Event Log Entry triggers Maintenance Mode Rule</Name>
+          <Description />
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.EventlogEntryTriggersMM.WriteAction">
+          <Name>Sample - Event Log Entry Triggers Maintenance Mode Write Action</Name>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.EventLogEntryTriggersAlert.Rule">
+          <Name>Sample - Event Log Entry Triggers Alert Rule</Name>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.EventLogEntryTriggersAlert.Rule.AlertMessage">
+          <Name>Sample Maintenance Mode 2012 - Maintenance Mode was Triggered On The Agent</Name>
+          <Description>The maintenance mode was triggered on: {0}. Event Description: {1}.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.RootFolder">
+          <Name>Sample MaintenanceMode</Name>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.Maintenance.AlertView">
+          <Name>Maintenance Alerts</Name>
+          <Description>Shows the Alerts which are raised when an operator triggers the maintenance mode on an Agent.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.Maintenance.StateView">
+          <Name>Maintenance</Name>
+          <Description>Shows the Health Service Watcher objects which are currently in maintenance mode.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.Production.StateView">
+          <Name>Production</Name>
+          <Description>Shows the Health Service Watcher objects which are currently not in maintenance mode.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.StateView">
+          <Name>Maintenance Mode</Name>
+          <Description>Shows the Health Service Watcher objects which are currently in or not in maintenance mode, respectively.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.OpsMgrAdmin.RunAsProfile">
+          <Name>Sample Maintenance Mode MP - Operations Manager Administrator Run As Profile</Name>
+          <Description>This profile is used if administrative access to Operations Manager is required.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.WriteAction.DeployableFile">
+          <Name>Deploy File Write Action</Name>
+          <Description>Write action for deploying a file.</Description>
+        </DisplayString>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.WriteAction.DeployLink">
+          <Name>Deploy Link Write Action</Name>
+          <Description>Write action for deploying a link to the default desktop.</Description>
+        </DisplayString>
+      </DisplayStrings>
+      <KnowledgeArticles></KnowledgeArticles>
+    </LanguagePack>
+  </LanguagePacks>
+  <Resources>
+    <DeployableResource ID="Sample.MaintenanceMode.MP.OpsMgrMM.ps1" Accessibility="Public" FileName="OpsMgrMM.ps1" />
+    <DeployableResource ID="Sample.MaintenanceMode.MP.OpsMgr2012.png" Accessibility="Public" FileName="OpsMgr2012.png" />
+    <DeployableResource ID="Sample.MaintenanceMode.MP.TriggerOM12MM.Instance.Event.vbs" Accessibility="Public" FileName="TriggerOM12MM.Instance.Event.vbs" />
+  </Resources>
+</ManagementPack>

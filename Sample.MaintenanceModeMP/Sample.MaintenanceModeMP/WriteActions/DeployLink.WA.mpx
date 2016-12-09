@@ -1,0 +1,36 @@
+﻿<ManagementPackFragment SchemaVersion="2.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <TypeDefinitions>
+    <ModuleTypes>
+      <WriteActionModuleType ID="Sample.MaintenanceMode.MP.WriteAction.DeployLink" Accessibility="Public" Batching="false">
+        <Configuration/>
+        <ModuleImplementation Isolation="Any">
+          <Composite>
+            <MemberModules>
+              <WriteAction ID="WA" TypeID="Windows!Microsoft.Windows.PowerShellWriteAction">
+                <ScriptName>DeployLink.ps1</ScriptName>
+                <ScriptBody>$IncludeFileContent/Resources/DeployLink.ps1$</ScriptBody>
+                <Parameters/>
+                <TimeoutSeconds>300</TimeoutSeconds>
+              </WriteAction>
+            </MemberModules>
+            <Composition>
+              <Node ID="WA" />
+            </Composition>
+          </Composite>
+        </ModuleImplementation>
+        <OutputType>System!System.BaseData</OutputType>
+        <InputType>System!System.BaseData</InputType>
+      </WriteActionModuleType>
+    </ModuleTypes>
+  </TypeDefinitions>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.WriteAction.DeployLink">
+          <Name>Deploy Link Write Action</Name>
+          <Description>Write action for deploying a link to the default desktop.</Description>
+        </DisplayString>
+      </DisplayStrings>
+    </LanguagePack>
+  </LanguagePacks>
+</ManagementPackFragment>

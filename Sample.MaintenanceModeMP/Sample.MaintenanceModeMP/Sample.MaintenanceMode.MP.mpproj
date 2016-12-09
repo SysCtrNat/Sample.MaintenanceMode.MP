@@ -1,0 +1,99 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <ProjectGuid>{f12f02d1-ba8c-4f95-aeb9-c484e4902887}</ProjectGuid>
+    <RootNamespace>Sample.MaintenanceMode.MP</RootNamespace>
+    <Name>Sample.MaintenanceMode.MP</Name>
+    <ManagementPackName>Sample.MaintenanceMode.MP</ManagementPackName>
+    <Version>1.0.0.0</Version>
+    <MpFrameworkVersion>v7.0.1</MpFrameworkVersion>
+    <MpFrameworkProfile>OM</MpFrameworkProfile>
+    <ProductVersion>1.1.0.0</ProductVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>C:\Seal\Output\</OutputPath>
+    <GenerateSealed>True</GenerateSealed>
+    <Company>Sample</Company>
+    <Copyright>Open Source</Copyright>
+    <DelaySigning>False</DelaySigning>
+    <AssemblyOriginatorKeyFile>C:\Seal\scomkey.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>false</DebugSymbols>
+    <OutputPath>bin\Release\</OutputPath>
+    <DelaySigning>false</DelaySigning>
+    <Company>MyCompany</Company>
+    <Copyright>Copyright (c) MyCompany. All rights reserved.</Copyright>
+    <DelaySign>false</DelaySign>
+    <AssemblyOriginatorKeyFile />
+  </PropertyGroup>
+  <ItemGroup>
+    <ManagementPackReference Include="Microsoft.SystemCenter.Library">
+      <Alias>SC</Alias>
+      <PackageToBundle>False</PackageToBundle>
+    </ManagementPackReference>
+    <ManagementPackReference Include="Microsoft.Windows.Library">
+      <Alias>Windows</Alias>
+      <PackageToBundle>False</PackageToBundle>
+    </ManagementPackReference>
+    <ManagementPackReference Include="System.Health.Library">
+      <Alias>Health</Alias>
+      <PackageToBundle>false</PackageToBundle>
+    </ManagementPackReference>
+    <ManagementPackReference Include="System.Library">
+      <Alias>System</Alias>
+      <PackageToBundle>false</PackageToBundle>
+    </ManagementPackReference>
+    <ManagementPackReference Include="Microsoft.SystemCenter.Visualization.Library">
+      <Alias>Visualization</Alias>
+      <PackageToBundle>false</PackageToBundle>
+    </ManagementPackReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="SecureReferences" />
+    <Folder Include="WriteActions" />
+    <Folder Include="Rules" />
+    <Folder Include="Resources" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Resources\Resources.mpx">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Rules\FileDeployment.mptg.mpx">
+      <SubType>Code</SubType>
+      <DependentUpon>Rules\FileDeployment.mptg</DependentUpon>
+    </Compile>
+    <Compile Include="Sample.MaintenanceMode.MP.mpx">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="SecureReferences\OpsMgrAdmin.Profile.mpx">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="WriteActions\DeployFile.WA.mpx">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="WriteActions\DeployLink.WA.mpx">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\DeployableFile.ps1" />
+    <EmbeddedResource Include="Resources\DeployLink.ps1" />
+    <EmbeddedResource Include="Resources\OpsMgrMM.ps1" />
+    <EmbeddedResource Include="Resources\TriggerOM12MM.Instance.Event.vbs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\OpsMgr2012.png">
+      <SubType>Content</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Rules\FileDeployment.mptg">
+      <SubType>Content</SubType>
+      <Generator>FragmentGenerator</Generator>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VSAC\Microsoft.SystemCenter.OperationsManager.targets" />
+</Project>

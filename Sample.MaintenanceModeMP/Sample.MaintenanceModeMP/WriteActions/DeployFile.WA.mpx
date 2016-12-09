@@ -1,0 +1,43 @@
+﻿<ManagementPackFragment SchemaVersion="2.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <TypeDefinitions>
+    <ModuleTypes>
+      <WriteActionModuleType ID="Sample.MaintenanceMode.MP.WriteAction.DeployableFile" Accessibility="Public" Batching="false">
+        <Configuration>
+          <xsd:element name="FilePaths" type="xsd:string" />
+        </Configuration>
+        <ModuleImplementation Isolation="Any">
+          <Composite>
+            <MemberModules>
+              <WriteAction ID="WA" TypeID="Windows!Microsoft.Windows.PowerShellWriteAction">
+                <ScriptName>DeployableFile.ps1</ScriptName>
+                <ScriptBody>$IncludeFileContent/Resources/DeployableFile.ps1$</ScriptBody>
+                <Parameters>
+                  <Parameter>
+                    <Name>FilePaths</Name>
+                    <Value>$Config/FilePaths$</Value>
+                  </Parameter>
+                </Parameters>
+                <TimeoutSeconds>300</TimeoutSeconds>
+              </WriteAction>
+            </MemberModules>
+            <Composition>
+              <Node ID="WA" />
+            </Composition>
+          </Composite>
+        </ModuleImplementation>
+        <OutputType>System!System.BaseData</OutputType>
+        <InputType>System!System.BaseData</InputType>
+      </WriteActionModuleType>
+    </ModuleTypes>
+  </TypeDefinitions>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.WriteAction.DeployableFile">
+          <Name>Deploy File Write Action</Name>
+          <Description>Write action for deploying a file.</Description>
+        </DisplayString>
+      </DisplayStrings>
+    </LanguagePack>
+  </LanguagePacks>
+</ManagementPackFragment>

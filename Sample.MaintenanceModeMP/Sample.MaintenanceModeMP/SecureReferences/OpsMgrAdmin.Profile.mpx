@@ -1,0 +1,17 @@
+﻿<ManagementPackFragment SchemaVersion="2.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <TypeDefinitions>
+    <SecureReferences>
+      <SecureReference ID="Sample.MaintenanceMode.MP.OpsMgrAdmin.RunAsProfile" Accessibility="Public" Context="System!System.Entity" />
+    </SecureReferences>
+  </TypeDefinitions>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="Sample.MaintenanceMode.MP.OpsMgrAdmin.RunAsProfile">
+          <Name>Sample Maintenance Mode MP - Operations Manager Administrator Run As Profile</Name>
+          <Description>This profile is used if administrative access to Operations Manager is required.</Description>
+        </DisplayString>
+      </DisplayStrings>
+    </LanguagePack>
+  </LanguagePacks>
+</ManagementPackFragment>

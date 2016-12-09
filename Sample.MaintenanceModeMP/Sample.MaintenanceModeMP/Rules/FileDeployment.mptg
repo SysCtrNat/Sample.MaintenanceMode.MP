@@ -1,0 +1,37 @@
+<TemplateGroup>
+  <Instances>
+    <Instance ID="Instancead122e8e2c2b461a804a5ac5069aa36f" Type="Microsoft.SystemCenter.Authoring.CodeGeneration.Monitoring.CustomRule" Version="1.0.0.0">
+      <CustomRuleConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+        <Id>FileDeployment.Rule</Id>
+        <DisplayName>Deploy MaintenanceMode Files</DisplayName>
+        <Description>Deploys all required files for the Maintenance Mode Splash Screen to C:\It\Mom\MM</Description>
+        <Category>Operations</Category>
+        <ConfirmDelivery>false</ConfirmDelivery>
+        <Target>Sample.MaintenanceMode.MP.AgentMaintModeClass</Target>
+        <Enabled>true</Enabled>
+        <Remotable>true</Remotable>
+        <Priority>Normal</Priority>
+        <DiscardLevel>100</DiscardLevel>
+        <DataSources>
+          <RuleDataSourceItem>
+            <DataSourceId>DS</DataSourceId>
+            <DataSourceConfig>&lt;Scheduler&gt;&lt;SimpleReccuringSchedule&gt;&lt;Interval Unit="Seconds"&gt;600&lt;/Interval&gt;&lt;SyncTime&gt;&lt;/SyncTime&gt;&lt;/SimpleReccuringSchedule&gt;&lt;ExcludeDates&gt;&lt;/ExcludeDates&gt;&lt;/Scheduler&gt;</DataSourceConfig>
+            <DataSourceType>System!System.Scheduler</DataSourceType>
+          </RuleDataSourceItem>
+        </DataSources>
+        <ConditionDetectionId>CD</ConditionDetectionId>
+        <WriteActions>
+          <RuleWriteActionItem>
+            <WriteActionId>WA</WriteActionId>
+            <WriteActionConfig>&lt;FilePaths&gt;$FileResource[Name='Sample.MaintenanceMode.MP.OpsMgrMM.ps1']/Path$,$FileResource[Name='Sample.MaintenanceMode.MP.OpsMgr2012.png']/Path$,$FileResource[Name='Sample.MaintenanceMode.MP.TriggerOM12MM.Instance.Event.vbs']/Path$&lt;/FilePaths&gt;</WriteActionConfig>
+            <WriteActionType>Sample.MaintenanceMode.MP.WriteAction.DeployableFile</WriteActionType>
+          </RuleWriteActionItem>
+          <RuleWriteActionItem>
+            <WriteActionId>WA2</WriteActionId>
+            <WriteActionType>Sample.MaintenanceMode.MP.WriteAction.DeployLink</WriteActionType>
+          </RuleWriteActionItem>
+        </WriteActions>
+      </CustomRuleConfig>
+    </Instance>
+  </Instances>
+</TemplateGroup>
